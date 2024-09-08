@@ -2,6 +2,7 @@ from project.graphs import Graph
 
 
 def test_get_graph_data():
+    """Test getting graph data"""
     graph = Graph("travel")
     expected_labels = {
         "type",

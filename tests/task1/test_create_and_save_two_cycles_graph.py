@@ -6,6 +6,7 @@ import os
 
 
 def test_create_and_save_two_cycles_graphs():
+    """Test creating, saving and loading two cycles graph"""
     n, m = 13, 31
     labels = ("biba", "boba")
     nodes_count = n + m + 1
