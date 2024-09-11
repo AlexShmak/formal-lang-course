@@ -1,15 +1,28 @@
-from pyformlang.regular_expression import Regex
+"""
+FSM tools
+"""
+
+from typing import Set
+
+from networkx.classes import MultiDiGraph
 from pyformlang.finite_automaton import (
     DeterministicFiniteAutomaton,
-    NondeterministicFiniteAutomaton,
     EpsilonNFA,
+    NondeterministicFiniteAutomaton,
     State,
 )
-from networkx.classes import MultiDiGraph
-from typing import Set
+from pyformlang.regular_expression import Regex
 
 
 def regex_to_dfa(regex: str) -> DeterministicFiniteAutomaton:
+    """Convert regex to DFA
+
+    Args:
+        regex (str): regular expression
+
+    Returns:
+        DeterministicFiniteAutomaton: DFA
+    """
     reg_expr = Regex(regex)
     nfa: EpsilonNFA = reg_expr.to_epsilon_nfa()
     dfa: DeterministicFiniteAutomaton = nfa.to_deterministic()
@@ -19,6 +32,16 @@ def regex_to_dfa(regex: str) -> DeterministicFiniteAutomaton:
 def graph_to_nfa(
     graph: MultiDiGraph, start_states: Set[int], final_states: Set[int]
 ) -> NondeterministicFiniteAutomaton:
+    """Convert graph to NFA
+
+    Args:
+        graph (MultiDiGraph)
+        start_states (Set[int])
+        final_states (Set[int])
+
+    Returns:
+        NondeterministicFiniteAutomaton
+    """
     nfa: NondeterministicFiniteAutomaton = (
         NondeterministicFiniteAutomaton.from_networkx(
             graph
