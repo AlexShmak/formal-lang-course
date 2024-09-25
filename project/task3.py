@@ -12,6 +12,7 @@ from pyformlang.finite_automaton import (
     DeterministicFiniteAutomaton,
     NondeterministicFiniteAutomaton,
     Symbol,
+    State,
 )
 from scipy.sparse import csr_array, kron
 
@@ -24,20 +25,24 @@ class AdjacencyMatrixFA:
     def __init__(
         self, fa: NondeterministicFiniteAutomaton | DeterministicFiniteAutomaton | None
     ):
-        # get start and final states
+        self.start_states: set[int] = set()
+        self.final_states: set[int] = set()
+        self.states_count = 0
+        self.states: list[State] = []
+        self.adjacency_matrices: dict[Symbol, csr_array] = {}
 
         if not fa:
-            self.states_count = 0
-            self.states = {}
-            self.start_states = set()
-            self.final_states = set()
-            self.adjacency_matrices = {}
             return
 
         self.states_count = len(fa.states)
-        self.states = {st: ind for (ind, st) in enumerate(fa.states)}
-        self.start_states = set(self.states[int(x.value)] for x in fa.start_states)
-        self.final_states = set(self.states[int(x.value)] for x in fa.final_states)
+        self.states = list(fa.states)
+        for i in range(self.states_count):
+            state: State = self.states[i]
+
+            if state in fa.start_states:
+                self.start_states.add(i)
+            if state in fa.final_states:
+                self.final_states.add(i)
 
         # get transitions
         self.number_transitions = fa.get_number_transitions()
@@ -51,10 +56,10 @@ class AdjacencyMatrixFA:
         for source_state, dest_state, label in fa.to_networkx().edges(data="label"):
             if label:
                 transition_matrices[Symbol(label)][
-                    self.states[source_state], self.states[dest_state]
+                    self.states.index(source_state), self.states.index(dest_state)
                 ] = True
 
-        self.adjacency_matrices: dict[Symbol, csr_array] = {
+        self.adjacency_matrices = {
             label: csr_array(transition_matrix)
             for (label, transition_matrix) in transition_matrices.items()
         }
@@ -75,29 +80,29 @@ class AdjacencyMatrixFA:
             configurations.append((list(word), state))
 
         for configuration in configurations:
-            _word = configuration[0]
-            _state = configuration[1]
-            if not _word and _state in self.final_states:
-                print("Accepts!")
-                return True
-            elif not _word:
+            if not configurations:
                 print("Don't accept!")
                 return False
+
+            word = configuration[0]
+            state = configuration[1]
+            if (not word) and (state in self.final_states):
+                print("Accepts!")
+                return True
+            elif not word:
+                continue
             else:
                 adjacency_matrices = self.adjacency_matrices
-                sym = _word[0]
+                sym = word[0]
                 if sym not in adjacency_matrices.keys():
-                    print("Don't accept!")
-                    return False
-                matrix_row = adjacency_matrices[sym].toarray()[_state]
+                    continue
+                matrix_row = adjacency_matrices[sym].toarray()[state]
 
                 for state, state_bool_value in enumerate(matrix_row):
                     if state_bool_value:
-                        configurations.append((_word[1:], state))
+                        configurations.append((word[1:], state))
                     else:
                         continue
-
-        print("Don't accept!")
         return False
 
     def transitive_closure(self) -> NDArray[bool_]:
@@ -148,16 +153,16 @@ def intersect_automata(
     intersection = AdjacencyMatrixFA(None)
     intersection.states_count = automaton1.states_count * automaton2.states_count
     for st1, st2 in product(automaton1.states, automaton2.states):
-        st1_ind, st2_ind = automaton1.states[st1], automaton2.states[st2]
+        st1_ind, st2_ind = automaton1.states.index(st1), automaton2.states.index(st2)
         intersection_ind = automaton2.states_count * st1_ind + st2_ind
 
         # add the new state
-        intersection.states[(st1, st2)] = intersection_ind
+        intersection.states.append(State((st1, st2)))
 
         # add the new state to start or final states
         if st1_ind in automaton1.start_states and st2_ind in automaton2.start_states:
             intersection.start_states.add(intersection_ind)
-        elif st1_ind in automaton1.final_states and st2_ind in automaton2.final_states:
+        if st1_ind in automaton1.final_states and st2_ind in automaton2.final_states:
             intersection.final_states.add(intersection_ind)
 
     for sym, adj_matrix1 in automaton1.adjacency_matrices.items():
@@ -170,3 +175,42 @@ def intersect_automata(
         else:
             continue
     return intersection
+
+
+def tensor_based_rpq(
+    graph: MultiDiGraph, start_nodes: set[int], final_nodes: set[int], regex: str
+) -> list[tuple[int, int]]:
+    """Regular Path Queries
+
+    Args:
+        graph (MultiDiGraph)
+        start_nodes (set[int])
+        final_nodes (set[int])
+        regex (str)
+
+    Returns:
+        list[tuple[int, int]]
+    """
+    regex_amfa = AdjacencyMatrixFA(regex_to_dfa(regex))
+    graph_amfa = AdjacencyMatrixFA(
+        graph_to_nfa(graph=graph, start_states=start_nodes, final_states=final_nodes)
+    )
+    intersection = intersect_automata(regex_amfa, graph_amfa)
+    transitive_closure = intersection.transitive_closure()
+
+    return_list: list[tuple[int, int]] = []
+
+    for graph_start, graph_final in product(start_nodes, final_nodes):
+        for regex_start_index, regex_final_index in product(
+            regex_amfa.start_states, regex_amfa.final_states
+        ):
+            graph_start_i = graph_amfa.states.index(graph_start)
+            graph_final_i = graph_amfa.states.index(graph_final)
+
+            start_index = regex_amfa.states_count * graph_start_i + regex_start_index
+            final_index = regex_amfa.states_count * graph_final_i + regex_final_index
+
+            if transitive_closure[start_index, final_index]:
+                return_list.append((graph_start, graph_final))
+
+    return return_list
