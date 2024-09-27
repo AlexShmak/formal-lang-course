@@ -11,8 +11,8 @@ from numpy.typing import NDArray
 from pyformlang.finite_automaton import (
     DeterministicFiniteAutomaton,
     NondeterministicFiniteAutomaton,
-    Symbol,
     State,
+    Symbol,
 )
 from scipy.sparse import csr_array, kron
 
@@ -109,18 +109,15 @@ class AdjacencyMatrixFA:
         Returns:
             NDArray[bool_]
         """
-        transitive_closure: NDArray[bool_] = np.diag(
-            np.ones(self.states_count, dtype=bool_)
-        )
-        for adjacency_matrix in self.adjacency_matrices.values():
-            transitive_closure |= adjacency_matrix.toarray()
+        if not self.adjacency_matrices:
+            return np.diag(np.ones(self.states_count, dtype=bool_))
 
-        for m in range(self.states_count):
-            for x in range(self.states_count):
-                for y in range(self.states_count):
-                    transitive_closure[x, y] = transitive_closure[x, y] or (
-                        transitive_closure[x, m] and transitive_closure[m, y]
-                    )
+        combined_matrices: csr_array = sum(self.adjacency_matrices.values())
+        combined_matrices.setdiag(True)
+        transitive_closure = np.linalg.matrix_power(
+            combined_matrices.toarray(), self.states_count
+        )
+
         return transitive_closure
 
     def is_empty(self) -> bool:
