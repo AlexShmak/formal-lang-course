@@ -81,13 +81,11 @@ class AdjacencyMatrixFA:
 
         for configuration in configurations:
             if not configurations:
-                print("Don't accept!")
                 return False
 
             word = configuration[0]
             state = configuration[1]
             if (not word) and (state in self.final_states):
-                print("Accepts!")
                 return True
             elif not word:
                 continue
