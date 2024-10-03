@@ -4,10 +4,9 @@ FSM tools
 
 from typing import Set
 
-from networkx.classes import MultiDiGraph
+from networkx import MultiDiGraph
 from pyformlang.finite_automaton import (
     DeterministicFiniteAutomaton,
-    EpsilonNFA,
     NondeterministicFiniteAutomaton,
     State,
 )
@@ -23,10 +22,12 @@ def regex_to_dfa(regex: str) -> DeterministicFiniteAutomaton:
     Returns:
         DeterministicFiniteAutomaton: DFA
     """
-    reg_expr = Regex(regex)
-    nfa: EpsilonNFA = reg_expr.to_epsilon_nfa()
-    dfa: DeterministicFiniteAutomaton = nfa.to_deterministic()
-    return dfa.minimize()
+    pf_regex = Regex(regex)
+    nfa: NondeterministicFiniteAutomaton = (
+        pf_regex.to_epsilon_nfa().remove_epsilon_transitions()
+    )
+    dfa = nfa.to_deterministic()
+    return dfa
 
 
 def graph_to_nfa(
@@ -44,18 +45,17 @@ def graph_to_nfa(
     """
     nfa: NondeterministicFiniteAutomaton = (
         NondeterministicFiniteAutomaton.from_networkx(
-            graph
+            graph=graph
         ).remove_epsilon_transitions()
     )
+    fa_states = set(int(i) for i in graph.nodes)
+    fa_start_states = fa_states if not start_states else start_states
+    fa_final_states = fa_states if not final_states else final_states
 
-    nodes = set(int(i) for i in graph.nodes)
-    start_nodes = nodes if not start_states else start_states
-    final_nodes = nodes if not final_states else final_states
-
-    for state in start_nodes:
+    for state in fa_start_states:
         nfa.add_start_state(State(state))
 
-    for state in final_nodes:
+    for state in fa_final_states:
         nfa.add_final_state(State(state))
 
     return nfa
