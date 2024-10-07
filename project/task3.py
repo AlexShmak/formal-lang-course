@@ -1,9 +1,10 @@
 """
-Adjacency Matrix Finite Automaton
+Adjacency Matrix Finite Automaton;
+Tensor Based Regular Path Queries
 """
 
-from itertools import product
 from collections import defaultdict
+from itertools import product
 from typing import Iterable, List, Set, Tuple
 
 import numpy as np
@@ -12,6 +13,7 @@ from numpy import bool_
 from numpy.typing import NDArray
 from pyformlang.finite_automaton import NondeterministicFiniteAutomaton, Symbol
 from scipy.sparse import csr_array, kron
+
 from project.task2 import graph_to_nfa, regex_to_dfa
 
 
@@ -96,9 +98,9 @@ class AdjacencyMatrixFA:
         combined.setdiag(True)
 
         transitive_closure = combined.toarray()
-        for pow in range(2, self.states_count + 1):
+        for power in range(2, self.states_count + 1):
             prev = transitive_closure
-            transitive_closure = np.linalg.matrix_power(prev, pow)
+            transitive_closure = np.linalg.matrix_power(prev, power)
             if np.array_equal(prev, transitive_closure):
                 break
         return transitive_closure
@@ -177,15 +179,22 @@ def tensor_based_rpq(
 
     intersection_amfa = intersect_automata(graph_amfa, regex_amfa)
     intersection_tc = intersection_amfa.transitive_closure()
+    result: set[tuple[int, int]] = set()
+    if not intersection_tc.any():
+        return result
 
-    return {
-        (start, final)
-        for start, final in product(start_nodes, final_nodes)
+    for start, final in product(start_nodes, final_nodes):
         for regex_start, regex_final in product(
             regex_dfa.start_states, regex_dfa.final_states
-        )
-        if intersection_tc[
-            intersection_amfa.states[(start, regex_start)],
-            intersection_amfa.states[(final, regex_final)],
-        ]
-    }
+        ):
+            if intersection_tc[
+                intersection_amfa.states[(start, regex_start)],
+                intersection_amfa.states[(final, regex_final)],
+            ]:
+                result.add((start, final))
+
+    return result
+
+    # except KeyError:
+    #     print(f"intersection_tc: ${intersection_tc}")
+    #     print(f"intersection_amfa.states: ${intersection_amfa.states}")
