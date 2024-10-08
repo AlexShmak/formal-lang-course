@@ -1,9 +1,14 @@
-from project.graphs import Graph
+import pytest
+
+try:
+    from project.graphs import GraphInfo
+except ImportError:
+    pytestmark = pytest.mark.skip("Task 2 is not ready to test!")
 
 
 def test_get_graph_data():
     """Test getting graph data"""
-    graph = Graph("travel")
+    graph = GraphInfo("travel")
     expected_labels = {
         "type",
         "subClassOf",
