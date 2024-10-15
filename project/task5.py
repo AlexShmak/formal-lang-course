@@ -1,26 +1,29 @@
 """
-Adjacency Matrix Finite Automaton;
-Tensor Based Regular Path Queries
+Altered Functions for Experimental Purposes (Generics added)
 """
 
 from collections import defaultdict
+from functools import reduce
 from itertools import product
-from typing import Iterable, List, Set, Tuple
+from typing import Iterable, List, Set, Tuple, TypeVar
 
 import numpy as np
 from networkx import MultiDiGraph
 from numpy import bool_
 from numpy.typing import NDArray
 from pyformlang.finite_automaton import NondeterministicFiniteAutomaton, Symbol
-from scipy.sparse import csr_array, kron
+from scipy.sparse import dok_matrix, kron, lil_matrix
 
 from project.task2 import graph_to_nfa, regex_to_dfa
 
+T = TypeVar("T")
+F = TypeVar("F")
 
-class AdjacencyMatrixFA:
+
+class ExperimentalAdjacencyMatrixFA:
     """Adjacency Matrix Finite Automata class"""
 
-    def __init__(self, fa: NondeterministicFiniteAutomaton | None):
+    def __init__(self, fa: NondeterministicFiniteAutomaton, matrix_type: T):
         self.start_states: Set[int] = set()
         self.final_states: Set[int] = set()
 
@@ -50,8 +53,8 @@ class AdjacencyMatrixFA:
                     self.states[source_st], self.states[dest_st]
                 ] = True
 
-        self.adj_matrices: dict[Symbol, csr_array] = {
-            symbol: csr_array(matrix) for symbol, matrix in matrices.items()
+        self.adj_matrices: dict[Symbol, T] = {
+            symbol: matrix_type(matrix) for symbol, matrix in matrices.items()
         }
 
     def accepts(self, word: Iterable[Symbol]) -> bool:
@@ -118,18 +121,21 @@ class AdjacencyMatrixFA:
 
 
 def intersect_automata(
-    automaton1: AdjacencyMatrixFA, automaton2: AdjacencyMatrixFA
-) -> AdjacencyMatrixFA:
+    automaton1: ExperimentalAdjacencyMatrixFA,
+    automaton2: ExperimentalAdjacencyMatrixFA,
+    matrix_type: T,
+    out_matrix_format: F,
+) -> ExperimentalAdjacencyMatrixFA:
     """Automaton intersection function
 
     Args:
-        automaton1 (AdjacencyMatrixFA)
-        automaton2 (AdjacencyMatrixFA)
+        automaton1 (ExperimentalAdjacencyMatrixFA)
+        automaton2 (ExperimentalAdjacencyMatrixFA)
 
     Returns:
         AdjacencyMatrixFA
     """
-    intersection = AdjacencyMatrixFA(None)
+    intersection = ExperimentalAdjacencyMatrixFA(None, matrix_type)
     intersection.states_count = automaton1.states_count * automaton2.states_count
 
     for st1, st2 in product(automaton1.states.keys(), automaton2.states.keys()):
@@ -147,13 +153,21 @@ def intersect_automata(
             continue
 
         adj2 = automaton2.adj_matrices[symbol]
-        intersection.adj_matrices[symbol] = kron(adj1, adj2, format="csr")
+        intersection.adj_matrices[symbol] = kron(adj1, adj2, format=out_matrix_format)
 
     return intersection
 
 
-def tensor_based_rpq(
-    regex: str, graph: MultiDiGraph, start_nodes: set[int], final_nodes: set[int]
+# * TENSOR_BASED_RPQ
+
+
+def experimental_tensor_based_rpq(
+    regex: str,
+    graph: MultiDiGraph,
+    start_nodes: set[int],
+    final_nodes: set[int],
+    matrix_type: T,
+    out_matrix_format: F,
 ) -> set[tuple[int, int]]:
     """Regular Path Queries
 
@@ -171,13 +185,16 @@ def tensor_based_rpq(
     start_nodes = start_nodes or nodes
     final_nodes = final_nodes or nodes
 
-    graph_amfa = AdjacencyMatrixFA(
-        graph_to_nfa(graph=graph, start_states=start_nodes, final_states=final_nodes)
+    graph_amfa = ExperimentalAdjacencyMatrixFA(
+        graph_to_nfa(graph=graph, start_states=start_nodes, final_states=final_nodes),
+        matrix_type,
     )
     regex_dfa = regex_to_dfa(regex=regex)
-    regex_amfa = AdjacencyMatrixFA(regex_to_dfa(regex=regex))
+    regex_amfa = ExperimentalAdjacencyMatrixFA(regex_to_dfa(regex=regex), matrix_type)
 
-    intersection_amfa = intersect_automata(graph_amfa, regex_amfa)
+    intersection_amfa = intersect_automata(
+        graph_amfa, regex_amfa, matrix_type, out_matrix_format
+    )
     intersection_tc = intersection_amfa.transitive_closure()
     result: set[tuple[int, int]] = set()
     if not intersection_tc.any():
@@ -192,5 +209,125 @@ def tensor_based_rpq(
                 intersection_amfa.states[(final, regex_final)],
             ]:
                 result.add((start, final))
+
+    return result
+
+
+# * MS_BFS_BASED_RPQ
+
+
+def experimental_start_front(
+    dfa: ExperimentalAdjacencyMatrixFA,
+    nfa: ExperimentalAdjacencyMatrixFA,
+    matrix_type: T,
+):
+    """Initialize the start front
+
+    Args:
+        dfa (ExperimentalAdjacencyMatrixFA): Regex DFA
+        nfa (ExperimentalAdjacencyMatrixFA): Graph NFA
+
+    Returns:
+        matrix: front
+    """
+    dfa_start_state = list(dfa.start_states)[0]
+    data = np.ones(len(nfa.start_states), dtype=bool)
+    rows = [
+        dfa_start_state + dfa.states_count * i for i in range(len(nfa.start_states))
+    ]
+    cols = list(nfa.start_states)
+
+    if matrix_type in [dok_matrix, lil_matrix]:
+        matrix = dok_matrix(
+            (
+                dfa.states_count * len(nfa.start_states),
+                nfa.states_count,
+            ),
+            dtype=bool,
+        )
+
+        for i, r in enumerate(rows):
+            matrix[r, cols[i]] = data[i]
+        return matrix
+
+    return matrix_type(
+        (data, (rows, cols)),
+        shape=(dfa.states_count * len(nfa.start_states), nfa.states_count),
+        dtype=bool,
+    )
+
+
+def experimental_ms_bfs_based_rpq(
+    regex: str,
+    graph: MultiDiGraph,
+    start_nodes: set[int],
+    final_nodes: set[int],
+    matrix_type: T,
+    out_matrix_format: F,
+) -> set[tuple[int, int]]:
+    """Multi Source BFS Based Regular Path Queries
+
+    Args:
+        regex (str): Regex constraints
+        graph (MultiDiGraph): Given graph
+        start_nodes (set[int]): Start graph nodes
+        final_nodes (set[int]): Final graph nodes
+
+    Returns:
+        set[tuple[int, int]]
+    """
+    regex_dfa = regex_to_dfa(regex)
+    graph_nfa = graph_to_nfa(
+        graph=graph, start_states=start_nodes, final_states=final_nodes
+    )
+
+    regex_amfa = ExperimentalAdjacencyMatrixFA(regex_dfa, matrix_type)
+    graph_amfa = ExperimentalAdjacencyMatrixFA(graph_nfa, matrix_type)
+
+    init_front = experimental_start_front(regex_amfa, graph_amfa, matrix_type)
+    result: set[tuple[int, int]] = set()
+    reg_amfa_transpose_matrices: dict[Symbol, T] = {}
+    for symbol, matrix in regex_amfa.adj_matrices.items():
+        reg_amfa_transpose_matrices[symbol] = matrix.transpose()
+
+    visited = init_front
+    symbols = [
+        sym
+        for sym in regex_amfa.adj_matrices.keys()
+        if sym in graph_amfa.adj_matrices.keys()
+    ]
+
+    while init_front.toarray().any():
+        next_fronts: dict[Symbol, T] = {}
+
+        for symbol in symbols:
+            next_fronts[symbol] = init_front @ graph_amfa.adj_matrices[symbol]
+
+            for i in range(len(graph_amfa.start_states)):
+                dfa_states_cnt = regex_amfa.states_count
+                start_ind, end_ind = i * dfa_states_cnt, (i + 1) * dfa_states_cnt
+                next_fronts[symbol][start_ind:end_ind] = (
+                    reg_amfa_transpose_matrices[symbol]
+                    @ next_fronts[symbol][start_ind:end_ind]
+                )
+
+        init_front = reduce(lambda x, y: x + y, next_fronts.values(), init_front)
+        init_front = init_front > visited
+        visited += init_front
+
+    reversed_nfa_states = {value: key for key, value in graph_amfa.states.items()}
+
+    for dfa_fn_state in regex_amfa.final_states:
+        for i, nfa_start_state in enumerate(graph_amfa.start_states):
+            for nfa_reached in visited.getrow(
+                regex_amfa.states_count * i + dfa_fn_state
+            ).indices:
+                if nfa_reached in graph_amfa.final_states:
+                    result.add(
+                        (
+                            reversed_nfa_states[nfa_start_state],
+                            reversed_nfa_states[nfa_reached],
+                        )
+                    )
 
     return result
