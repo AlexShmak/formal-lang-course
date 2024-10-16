@@ -1,6 +1,6 @@
 import networkx as nx
 import cfpq_data
-from project.graphs import create_and_save_two_cycles_graph
+from project.task1 import create_and_save_two_cycles_graph
 from pydot import graph_from_dot_file
 import os
 
