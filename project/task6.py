@@ -38,7 +38,7 @@ def hellings_based_cfpq(
         final_nodes (set[int], optional):  Defaults to None.
 
     Returns:
-        set[tuple[int, int]]: _description_
+        set[tuple[int, int]]
     """
     wcnf = cfg_to_weak_normal_form(cfg)
     m = set()
