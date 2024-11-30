@@ -1,7 +1,7 @@
 import pytest
 
 try:
-    from project.graphs import GraphInfo
+    from project.task1 import GraphInfo
 except ImportError:
     pytestmark = pytest.mark.skip("Task 2 is not ready to test!")
 

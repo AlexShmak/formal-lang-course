@@ -1,5 +1,5 @@
 """
-Multi Source BFS Regular Path Queries
+Multi Source BFS Regular Path Querying
 """
 
 from functools import reduce
@@ -23,16 +23,17 @@ def start_front(dfa: AdjacencyMatrixFA, nfa: AdjacencyMatrixFA):
     Returns:
         csr_matrix: front
     """
-    dfa_start_state = list(dfa.start_states)[0]
-    data = np.ones(len(nfa.start_states), dtype=bool)
+    dfa_start_state = list(dfa.start_states_indices)[0]
+    data = np.ones(len(nfa.start_states_indices), dtype=bool)
     rows = [
-        dfa_start_state + dfa.states_count * i for i in range(len(nfa.start_states))
+        dfa_start_state + dfa.states_count * i
+        for i in range(len(nfa.start_states_indices))
     ]
-    cols = list(nfa.start_states)
+    cols = list(nfa.start_states_indices)
 
     return csr_matrix(
         (data, (rows, cols)),
-        shape=(dfa.states_count * len(nfa.start_states), nfa.states_count),
+        shape=(dfa.states_count * len(nfa.start_states_indices), nfa.states_count),
         dtype=bool,
     )
 
@@ -78,7 +79,7 @@ def ms_bfs_based_rpq(
         for symbol in symbols:
             next_fronts[symbol] = init_front @ graph_amfa.adj_matrices[symbol]
 
-            for i in range(len(graph_amfa.start_states)):
+            for i in range(len(graph_amfa.start_states_indices)):
                 dfa_states_cnt = regex_amfa.states_count
                 start_ind, end_ind = i * dfa_states_cnt, (i + 1) * dfa_states_cnt
                 next_fronts[symbol][start_ind:end_ind] = (
@@ -90,18 +91,17 @@ def ms_bfs_based_rpq(
         init_front = init_front > visited
         visited += init_front
 
-    reversed_nfa_states = {value: key for key, value in graph_amfa.states.items()}
-
-    for dfa_fn_state in regex_amfa.final_states:
-        for i, nfa_start_state in enumerate(graph_amfa.start_states):
+    ind_to_state = graph_amfa.indices_states
+    for dfa_fn_state in regex_amfa.final_states_indices:
+        for i, nfa_start_state in enumerate(graph_amfa.start_states_indices):
             for nfa_reached in visited.getrow(
                 regex_amfa.states_count * i + dfa_fn_state
             ).indices:
-                if nfa_reached in graph_amfa.final_states:
+                if nfa_reached in graph_amfa.final_states_indices:
                     result.add(
                         (
-                            reversed_nfa_states[nfa_start_state],
-                            reversed_nfa_states[nfa_reached],
+                            ind_to_state[nfa_start_state],
+                            ind_to_state[nfa_reached],
                         )
                     )
 
