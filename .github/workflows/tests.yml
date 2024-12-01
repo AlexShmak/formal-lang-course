@@ -24,5 +24,8 @@ jobs:
       - name: Sync dependencies
         run: rye sync
 
+      - name: ANTLRv4
+        run: | ./project/queryLanguage/generate_parser_lexer.sh
+
       - name: Run tests
         run: python scripts/run_tests.py
