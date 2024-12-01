@@ -25,7 +25,9 @@ jobs:
         run: rye sync
 
       - name: ANTLRv4
-        run: ./project/queryLanguage/generate_parser_lexer.sh
+        run: |
+          source .venv/bin/activate
+          antlr4 -Dlanguage=Python3 project/queryLanguage/QueryLanguage.g4
 
       - name: Run tests
         run: python scripts/run_tests.py
