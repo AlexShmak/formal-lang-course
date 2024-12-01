@@ -148,3 +148,8 @@ _minted-presentation/
 
 # MacOS
 .DS_Store
+
+# Antlr4
+*.jar
+*.tokens
+*.interp
