@@ -1,200 +1,238 @@
 """
 Adjacency Matrix Finite Automaton;
-Tensor Based Regular Path Queries
+Tensor Based Regular Path Querying
 """
 
-from collections import defaultdict
-from itertools import product
-from typing import Iterable, List, Set, Tuple
-
+import functools
+import operator
 import numpy as np
-from networkx import MultiDiGraph
-from numpy import bool_
-from numpy.typing import NDArray
-from pyformlang.finite_automaton import NondeterministicFiniteAutomaton, Symbol
-from scipy.sparse import csr_array, kron
+import scipy as sp
 
+from dataclasses import dataclass
+from typing import Iterable
+
+from pyformlang.finite_automaton import NondeterministicFiniteAutomaton, Symbol, State
+from networkx import MultiDiGraph
 from project.task2 import graph_to_nfa, regex_to_dfa
 
 
+@dataclass
+class AdjacencyMatrixFAData:
+    states: set[State]
+    start_states: set[State]
+    final_states: set[State]
+    states_indices: dict[State, int]
+    adj_matrices: dict[Symbol, sp.sparse.csc_matrix]
+
+
 class AdjacencyMatrixFA:
-    """Adjacency Matrix Finite Automata class"""
+    def __init__(
+        self, automaton: NondeterministicFiniteAutomaton | AdjacencyMatrixFAData
+    ):
+        self._states: set[State] = automaton.states
+        self._start_states: set[State] = automaton.start_states
+        self._final_states: set[State] = automaton.final_states
+        self._states_amount: int = len(self._states)
 
-    def __init__(self, fa: NondeterministicFiniteAutomaton | None):
-        self.start_states: Set[int] = set()
-        self.final_states: Set[int] = set()
-
-        if not fa:
-            self.states_count = 0
-            self.states: dict[any, int] = {}
-            self.adj_matrices = {}
-            return
-
-        graph = fa.to_networkx()
-        self.states_count = graph.number_of_nodes()
-        self.states: dict[any, int] = {st: i for (i, st) in enumerate(graph.nodes)}
-
-        for state in fa.states:
-            if state in fa.start_states:
-                self.start_states.add(self.states[state])
-            if state in fa.final_states:
-                self.final_states.add(self.states[state])
-
-        matrices: dict[Symbol, NDArray[bool_]] = defaultdict(
-            lambda: np.zeros((self.states_count, self.states_count), dtype=bool_)
+        self._states_indices: dict[State, int] = (
+            automaton.states_indices
+            if isinstance(automaton, AdjacencyMatrixFAData)
+            else {st: i for (i, st) in enumerate(automaton.states)}
+        )
+        self._start_states_indices: set[int] = set(
+            self._states_indices[st] for st in automaton.start_states
+        )
+        self._final_states_indices: set[int] = set(
+            self._states_indices[st] for st in automaton.final_states
         )
 
-        for source_st, dest_st, label in graph.edges(data="label"):
+        self._matrix_size: tuple[int, int] = (self._states_amount, self._states_amount)
+        self._adj_matrices: dict[Symbol, sp.sparse.csc_matrix] = {}
+
+        if isinstance(automaton, AdjacencyMatrixFAData):
+            self._adj_matrices: dict[Symbol, sp.sparse.csc_matrix] = (
+                automaton.adj_matrices
+            )
+            return
+        graph = automaton.to_networkx()
+        for u, v, label in graph.edges(data="label"):
             if label:
-                matrices[Symbol(label)][
-                    self.states[source_st], self.states[dest_st]
+                symbol = Symbol(label)
+                if symbol not in self._adj_matrices:
+                    self._adj_matrices[symbol] = sp.sparse.csc_matrix(
+                        self._matrix_size, dtype=bool
+                    )
+                self._adj_matrices[symbol][
+                    self._states_indices[u], self._states_indices[v]
                 ] = True
 
-        self.adj_matrices: dict[Symbol, csr_array] = {
-            symbol: csr_array(matrix) for symbol, matrix in matrices.items()
-        }
+    @property
+    def adj_matrices(self) -> dict[Symbol, sp.sparse.csc_matrix]:
+        return self._adj_matrices
+
+    @property
+    def states(self) -> set[State]:
+        return self._states
+
+    @property
+    def start_states(self) -> set[State]:
+        return self._start_states
+
+    @property
+    def final_states(self) -> set[State]:
+        return self._final_states
+
+    @property
+    def states_count(self) -> int:
+        return self._states_amount
+
+    @property
+    def states_indices(self) -> dict[State, int]:
+        return self._states_indices
+
+    @property
+    def indices_states(self) -> dict[int, State]:
+        return {v: k for k, v in self._states_indices.items()}
+
+    @property
+    def start_states_indices(self) -> set[int]:
+        return self._start_states_indices
+
+    @property
+    def final_states_indices(self) -> set[int]:
+        return self._final_states_indices
+
+    @property
+    def start_configuration(self) -> np.ndarray:
+        start_config = np.zeros(self._states_amount, dtype=bool)
+        for start_state_index in self._start_states_indices:
+            start_config[start_state_index] = True
+        return start_config
+
+    @property
+    def final_configuration(self) -> np.ndarray:
+        final_config = np.zeros(self._states_amount, dtype=bool)
+        for final_state_index in self._final_states_indices:
+            final_config[final_state_index] = True
+        return final_config
+
+    def transitive_closure(self) -> sp.sparse.csc_matrix:
+        matrices_list = list(self._adj_matrices.values())
+        init_matrix = sp.sparse.csc_matrix(self._matrix_size, dtype=bool)
+        main_diagonal_indices = np.arange(self._matrix_size[0])
+        init_matrix[main_diagonal_indices, main_diagonal_indices] = True
+        common_matrix = functools.reduce(operator.add, matrices_list, init_matrix)
+        closure = common_matrix**self._states_amount
+        return closure
 
     def accepts(self, word: Iterable[Symbol]) -> bool:
-        """Interpreter function
+        start_config = self.start_configuration
+        final_config = self.final_configuration
 
-        Args:
-            word (Iterable[Symbol])
+        current_config = start_config.copy()
 
-        Returns:
-            bool
-        """
-        fa_word = list(word)
-        confs: List[Tuple[List, int]] = [(fa_word, st) for st in self.start_states]
-
-        while len(confs) != 0:
-            conf = confs.pop()
-            word = conf[0]
-            st = conf[1]
-
-            if not word:
-                if st in self.final_states:
-                    return True
-                continue
-
-            adj_matrice = self.adj_matrices[word[0]]
-            if adj_matrice is None:
-                continue
-
-            for next_st in range(self.states_count):
-                if adj_matrice[st, next_st]:
-                    confs.append((word[1:], next_st))
-        return False
-
-    def transitive_closure(self):
-        """Transitive closure for the states of the automata
-
-        Returns:
-            NDArray[bool_]
-        """
-        if not self.adj_matrices:
-            return np.eye(self.states_count, self.states_count, dtype=bool_)
-
-        combined = sum(self.adj_matrices.values())
-        combined.setdiag(True)
-
-        transitive_closure = combined.toarray()
-        for power in range(2, self.states_count + 1):
-            prev = transitive_closure
-            transitive_closure = np.linalg.matrix_power(prev, power)
-            if np.array_equal(prev, transitive_closure):
-                break
-        return transitive_closure
+        for symbol in word:
+            if symbol not in self._adj_matrices:
+                return False
+            matrix = self._adj_matrices[symbol]
+            current_config = current_config @ matrix.toarray()
+        return np.any(current_config & final_config)
 
     def is_empty(self) -> bool:
-        """Check whether the automata-generated language is empty or not
-
-        Returns:
-            bool
-        """
         transitive_closure = self.transitive_closure()
-
-        for start_st, final_st in product(self.start_states, self.final_states):
-            return not transitive_closure[start_st, final_st]
+        empty = True
+        for start in self._start_states_indices:
+            for final in self._final_states_indices:
+                empty = False if transitive_closure[start, final] else empty
+        return empty
 
 
 def intersect_automata(
     automaton1: AdjacencyMatrixFA, automaton2: AdjacencyMatrixFA
 ) -> AdjacencyMatrixFA:
-    """Automaton intersection function
+    states: set[State] = set()
+    start_states: set[State] = set()
+    final_states: set[State] = set()
+    states_indices: dict[State, int] = {}
+    adj_matrices: dict[Symbol, sp.sparse.csc_matrix] = {}
 
-    Args:
-        automaton1 (AdjacencyMatrixFA)
-        automaton2 (AdjacencyMatrixFA)
+    for first_automaton_state in automaton1.states:
+        for second_automaton_state in automaton2.states:
+            first_automaton_state_index = automaton1.states_indices[
+                first_automaton_state
+            ]
+            second_automaton_state_index = automaton2.states_indices[
+                second_automaton_state
+            ]
 
-    Returns:
-        AdjacencyMatrixFA
-    """
-    intersection = AdjacencyMatrixFA(None)
-    intersection.states_count = automaton1.states_count * automaton2.states_count
+            new_state = State((first_automaton_state, second_automaton_state))
+            new_automaton_state_index = (
+                automaton2.states_count * first_automaton_state_index
+                + second_automaton_state_index
+            )
 
-    for st1, st2 in product(automaton1.states.keys(), automaton2.states.keys()):
-        st1_ind = automaton1.states[st1]
-        st2_ind = automaton2.states[st2]
-        intersection_ind = automaton2.states_count * st1_ind + st2_ind
-        if st1_ind in automaton1.start_states and st2_ind in automaton2.start_states:
-            intersection.start_states.add(intersection_ind)
-        if st1_ind in automaton1.final_states and st2_ind in automaton2.final_states:
-            intersection.final_states.add(intersection_ind)
-        intersection.states[(st1, st2)] = intersection_ind
+            states.add(new_state)
+            states_indices[new_state] = new_automaton_state_index
 
-    for symbol, adj1 in automaton1.adj_matrices.items():
+            if (
+                first_automaton_state in automaton1.start_states
+                and second_automaton_state in automaton2.start_states
+            ):
+                start_states.add(new_state)
+            if (
+                first_automaton_state in automaton1.final_states
+                and second_automaton_state in automaton2.final_states
+            ):
+                final_states.add(new_state)
+
+    for symbol in automaton1.adj_matrices:
         if symbol not in automaton2.adj_matrices:
             continue
 
-        adj2 = automaton2.adj_matrices[symbol]
-        intersection.adj_matrices[symbol] = kron(adj1, adj2, format="csr")
+        first_automaton_symbol_adj = automaton1.adj_matrices[symbol]
+        second_automaton_symbol_adj = automaton2.adj_matrices[symbol]
 
-    return intersection
+        new_automaton_symbol_adj = sp.sparse.kron(
+            first_automaton_symbol_adj, second_automaton_symbol_adj, format="csc"
+        )
+        adj_matrices[symbol] = new_automaton_symbol_adj
+
+    return AdjacencyMatrixFA(
+        AdjacencyMatrixFAData(
+            states=states,
+            start_states=start_states,
+            final_states=final_states,
+            states_indices=states_indices,
+            adj_matrices=adj_matrices,
+        )
+    )
 
 
 def tensor_based_rpq(
     regex: str, graph: MultiDiGraph, start_nodes: set[int], final_nodes: set[int]
 ) -> set[tuple[int, int]]:
-    """Regular Path Queries
+    graph_nfa = graph_to_nfa(graph, start_nodes, final_nodes)
+    regex_dfa = regex_to_dfa(regex)
 
-    Args:
-        graph (MultiDiGraph)
-        start_nodes (set[int])
-        final_nodes (set[int])
-        regex (str)
+    graph_nfa_adj_matrix = AdjacencyMatrixFA(graph_nfa)
+    regex_dfa_adj_matrix = AdjacencyMatrixFA(regex_dfa)
 
-    Returns:
-        list[tuple[int, int]]
-    """
-
-    nodes = {int(node) for node in graph.nodes}
-    start_nodes = start_nodes or nodes
-    final_nodes = final_nodes or nodes
-
-    graph_amfa = AdjacencyMatrixFA(
-        graph_to_nfa(graph=graph, start_states=start_nodes, final_states=final_nodes)
+    adj_matrix_intersection = intersect_automata(
+        graph_nfa_adj_matrix, regex_dfa_adj_matrix
     )
-    regex_dfa = regex_to_dfa(regex=regex)
-    regex_amfa = AdjacencyMatrixFA(regex_to_dfa(regex=regex))
+    reachability_matrix = adj_matrix_intersection.transitive_closure()
 
-    intersection_amfa = intersect_automata(graph_amfa, regex_amfa)
-    intersection_tc = intersection_amfa.transitive_closure()
-    result: set[tuple[int, int]] = set()
-    if not intersection_tc.any():
-        return result
+    result = set()
 
-    for start, final in product(start_nodes, final_nodes):
-        for regex_start, regex_final in product(
-            regex_dfa.start_states, regex_dfa.final_states
-        ):
-            if intersection_tc[
-                intersection_amfa.states[(start, regex_start)],
-                intersection_amfa.states[(final, regex_final)],
-            ]:
-                result.add((start, final))
+    inverted_states_indices_dict = {
+        value: key for key, value in adj_matrix_intersection.states_indices.items()
+    }
+
+    for start in adj_matrix_intersection.start_states_indices:
+        for final in adj_matrix_intersection.final_states_indices:
+            if reachability_matrix[start, final]:
+                graph_start_state = inverted_states_indices_dict[start].value[0]
+                graph_final_state = inverted_states_indices_dict[final].value[0]
+                result.add((graph_start_state, graph_final_state))
 
     return result
-
-    # except KeyError:
-    #     print(f"intersection_tc: ${intersection_tc}")
-    #     print(f"intersection_amfa.states: ${intersection_amfa.states}")

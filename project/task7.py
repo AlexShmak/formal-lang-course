@@ -1,5 +1,5 @@
 """
-Hellings Algorithm with Matrix Based Approach for Context-Free Path Quering
+Hellings Algorithm with Matrix Based Approach for Context-Free Path Querying
 """
 
 from typing import Set
