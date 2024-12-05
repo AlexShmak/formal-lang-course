@@ -1,52 +1,40 @@
 grammar QueryLanguage;
 
-prog: stmt*;
+prog: stmt* EOF;
 
-stmt: bind
-    | add
-    | remove
-    | declare;
+stmt: bindStmt | addStmt | removeStmt | declareStmt;
 
-declare: 'let' VAR 'is' 'graph';
+declareStmt: 'let' VAR 'is' 'graph';
 
-bind: 'let' VAR '=' expr;
+bindStmt: 'let' VAR '=' expr;
 
-remove: 'remove' ('vertex' | 'edge' | 'vertices') expr 'from' VAR;
+removeStmt:
+    'remove' ('vertex' | 'edge' | 'vertices') expr 'from' VAR;
 
-add: 'add' ('vertex' | 'edge') expr 'to' VAR;
+addStmt: 'add' ('vertex' | 'edge') expr 'to' VAR;
 
-expr: NUM
-    | CHAR
-    | VAR
-    | edge_expr
-    | set_expr
-    | regexp
-    | select;
+expr: NUM | CHAR | VAR | edgeExpr | setExpr | regexExpr | selectExpr;
 
-set_expr: '[' expr (',' expr)* ']';
+setExpr: '[' expr (',' expr)* ']';
 
-edge_expr: '(' expr ',' expr ',' expr ')';
+edgeExpr: '(' expr ',' expr ',' expr ')';
 
-regexp: term ('|' term)*;
+regexExpr: regexTerm ('|' regexTerm)*;
+regexTerm: regexFactor (('.' | '&') regexFactor)*;
+regexFactor: regexBase ('^' regexRange)*;
+regexBase: CHAR | VAR | '(' regexExpr ')';
 
-term: factor (('.' | '&') factor)*;
+regexRange: '[' NUM '..' NUM? ']';
 
-factor: primary ('^' range)*;
+selectExpr:
+    varFilter? varFilter? 'return' VAR (',' VAR)? 'where' VAR 'reachable' 'from' VAR 'in' VAR 'by'
+        expr;
 
-primary: CHAR
-       | VAR
-       | '(' regexp ')';
-
-range: '[' NUM '..' NUM? ']';
-
-select: v_filter? v_filter? 'return' VAR (',' VAR)? 'where' VAR 'reachable' 'from' VAR 'in' VAR 'by' expr;
-
-v_filter: 'for' VAR 'in' expr;
+varFilter: 'for' VAR 'in' expr;
 
 VAR: [a-z] [a-z0-9]*;
-
-NUM: '0' | [1-9] [0-9]*;
-
-CHAR: '"' [a-z] '"';
+NUM: [0] | [1-9] [0-9]*;
+CHAR: '"' [a-z] '"' | '\'' [a-z] '\'';
 
 WS: [ \t\r\n]+ -> skip;
+EOF_TOKEN: '<EOF>' -> skip;
