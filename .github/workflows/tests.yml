@@ -24,5 +24,10 @@ jobs:
       - name: Sync dependencies
         run: rye sync
 
+      - name: ANTLRv4
+        run: |
+          source .venv/bin/activate
+          antlr4 -Dlanguage=Python3 project/queryLanguage/QueryLanguage.g4
+
       - name: Run tests
         run: python scripts/run_tests.py

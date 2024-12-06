@@ -8,7 +8,6 @@ authors = [
     { name = "Nikolai Ponomarev", email = "wowasterdev@gmail.com" },
 ]
 dependencies = [
-    "antlr4-python3-runtime>=4.13.1",
     "cfpq-data>=4.0.3",
     "networkx>=3.2.1",
     "pre-commit>=3.8.0",
@@ -17,6 +16,8 @@ dependencies = [
     "scipy>=1.14.1",
     "grammarinator @ git+https://github.com/renatahodovan/grammarinator.git@f3ffa71",
     "pyformlang>=1.0.7",
+    "antlr4-python3-runtime==4.13.1",
+    "antlr4-tools>=0.2.1",
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
