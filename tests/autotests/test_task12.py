@@ -48,7 +48,6 @@ class TestProgramInterpreter:
         )
         program = query.full_program()
         assert typing_program(deepcopy(program))
-        print(exec_program(deepcopy(program)))
         cfpq_from_prog = exec_program(deepcopy(program))[query.result_name]
         cfpq_from_algo = matrix_based_cfpq(
             deepcopy(grammar),
