@@ -2,6 +2,12 @@ import random
 from copy import deepcopy
 
 import pytest
+from networkx import MultiDiGraph
+from pyformlang.cfg import CFG
+
+from constants import LABELS
+from grammars_constants import GRAMMARS_DIFFERENT
+from helper import generate_rnd_start_and_final, generate_rnd_dense_graph
 from to_program_parser import (
     WELL_TYPED,
     ILL_TYPED,
@@ -10,15 +16,13 @@ from to_program_parser import (
     QueryProgram,
     to_program_parser,
 )
-from grammars_constants import GRAMMARS_DIFFERENT
-from networkx import MultiDiGraph
-from pyformlang.cfg import CFG
-from helper import generate_rnd_start_and_final, generate_rnd_dense_graph
-from constants import LABELS
 
 try:
     from project.task7 import matrix_based_cfpq
-    from project.task12 import typing_program, exec_program
+
+    # from project.task12 import typing_program, exec_program
+    from project.queryLanguage.typing.typechecker import typing_program
+    from project.queryLanguage.interpreter.interpreter import exec_program
 except ImportError:
     pytestmark = pytest.mark.skip("Task 12 is not ready to test!")
 
@@ -44,6 +48,7 @@ class TestProgramInterpreter:
         )
         program = query.full_program()
         assert typing_program(deepcopy(program))
+        print(exec_program(deepcopy(program)))
         cfpq_from_prog = exec_program(deepcopy(program))[query.result_name]
         cfpq_from_algo = matrix_based_cfpq(
             deepcopy(grammar),
@@ -77,7 +82,7 @@ class TestProgramInterpreter:
             query_full_program = query.full_program()
             assert typing_program(deepcopy(query_full_program))
             separate_res = exec_program(deepcopy(query_full_program))
-            assert separate_res == res
+            assert separate_res[var] == res
             assert res == matrix_based_cfpq(
                 query.get_grammar(),
                 query.get_graph(),

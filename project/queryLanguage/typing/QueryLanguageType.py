@@ -1,0 +1,11 @@
+class QueryLanguageType:
+    EDGE = "Edge"
+    NUM = "Number"
+    CHAR = "Character"
+    GRAPH = "Graph"
+    FA = "FA"
+    RSM = "RSM"
+    SET = "Set<int>"
+    PAIR_SET = "Set<int * int>"
+    RANGE = "RANGE"
+    UNKNOWN = "ERROR"
