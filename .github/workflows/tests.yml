@@ -27,7 +27,7 @@ jobs:
       - name: ANTLRv4
         run: |
           source .venv/bin/activate
-          antlr4 -Dlanguage=Python3 project/queryLanguage/QueryLanguage.g4
+          antlr4 -Dlanguage=Python3 -visitor project/queryLanguage/utils/QueryLanguage.g4
 
       - name: Run tests
         run: python scripts/run_tests.py

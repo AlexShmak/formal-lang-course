@@ -1,8 +1,8 @@
 from antlr4 import CommonTokenStream, ParserRuleContext, InputStream, ParseTreeWalker
 
-from project.queryLanguage.QueryLanguageLexer import QueryLanguageLexer
-from project.queryLanguage.QueryLanguageParser import QueryLanguageParser
-from project.queryLanguage.listeners import CountListener, TokensListener
+from project.queryLanguage.utils.QueryLanguageLexer import QueryLanguageLexer
+from project.queryLanguage.utils.QueryLanguageParser import QueryLanguageParser
+from project.queryLanguage.parser.listeners import CountListener, TokensListener
 
 
 def program_to_tree(program: str) -> tuple[ParserRuleContext, bool]:
